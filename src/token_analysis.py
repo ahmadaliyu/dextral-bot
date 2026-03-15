@@ -3,6 +3,8 @@ Token analysis engine — aggregates data from all sources into
 comprehensive research reports.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
 

@@ -2,6 +2,8 @@
 Web3 provider for Base chain — on-chain reads.
 """
 
+from __future__ import annotations
+
 import logging
 from web3 import Web3
 from web3.contract import Contract

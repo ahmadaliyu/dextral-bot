@@ -33,13 +33,16 @@ from src.handlers import (
 
 # ─── Logging ──────────────────────────────────────────────────
 
+log_handlers = [logging.StreamHandler(sys.stdout)]
+try:
+    log_handlers.append(logging.FileHandler("dextral.log", encoding="utf-8"))
+except (OSError, PermissionError):
+    pass  # Skip file logging on platforms like Render
+
 logging.basicConfig(
     format="%(asctime)s │ %(name)-20s │ %(levelname)-8s │ %(message)s",
     level=logging.INFO,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("dextral.log", encoding="utf-8"),
-    ],
+    handlers=log_handlers,
 )
 # Silence noisy libs
 logging.getLogger("httpx").setLevel(logging.WARNING)

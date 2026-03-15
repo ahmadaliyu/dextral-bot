@@ -3,6 +3,8 @@ External API integrations — DexScreener, GeckoTerminal, Basescan, GoPlus.
 All async using aiohttp.
 """
 
+from __future__ import annotations
+
 import logging
 import aiohttp
 from cachetools import TTLCache
