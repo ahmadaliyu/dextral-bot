@@ -1,0 +1,6 @@
+python-telegram-bot[ext]==21.3
+web3==6.19.0
+aiohttp==3.9.5
+python-dotenv==1.0.1
+cachetools==5.3.3
+APScheduler==3.10.4
