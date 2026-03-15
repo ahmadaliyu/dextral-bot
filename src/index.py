@@ -23,6 +23,7 @@ from src.handlers import (
     cmd_dev,
     cmd_holders,
     cmd_whale,
+    cmd_pvp,
     cmd_trending,
     cmd_new,
     cmd_search,
@@ -79,6 +80,7 @@ def main() -> None:
     app.add_handler(CommandHandler("dev", cmd_dev))
     app.add_handler(CommandHandler("holders", cmd_holders))
     app.add_handler(CommandHandler("whale", cmd_whale))
+    app.add_handler(CommandHandler("pvp", cmd_pvp))
     app.add_handler(CommandHandler("trending", cmd_trending))
     app.add_handler(CommandHandler("new", cmd_new))
     app.add_handler(CommandHandler("search", cmd_search))

@@ -370,3 +370,78 @@ def build_new_pairs_message(pools: list) -> str:
 
     lines.append(f"{'━' * 32}")
     return "\n".join(lines)
+
+
+def build_pvp_message(pvp_info: dict) -> str:
+    """Build the /pvp response — duplicate/copycat token detection."""
+    token_name = pvp_info.get("token_name", "Unknown")
+    token_symbol = pvp_info.get("token_symbol", "???")
+    token_address = pvp_info.get("token_address", "")
+    duplicates = pvp_info.get("duplicates", [])
+    total = pvp_info.get("total_found", 0)
+    pvp_risk = pvp_info.get("pvp_risk", "")
+    is_original = pvp_info.get("is_original", True)
+
+    lines = [
+        f"{'━' * 32}",
+        f"⚔️ <b>PvP Analysis</b> — ${token_symbol}",
+        f"{'━' * 32}",
+        "",
+        f"🎯 <b>Your Token:</b> {token_name} (${token_symbol})",
+        f"📋 <code>{token_address}</code>",
+        f"🏊 Liquidity: {fmt_number(pvp_info.get('token_liquidity', 0))}",
+        f"📊 Market Cap: {fmt_number(pvp_info.get('token_mcap', 0))}",
+        "",
+        f"{'━' * 32}",
+        f"⚠️ <b>PvP Risk:</b> {pvp_risk}",
+        f"{'━' * 32}",
+    ]
+
+    if not is_original:
+        lines += [
+            "",
+            "🚨 <b>WARNING:</b> Another token with the same name has",
+            "    MORE liquidity — your token may NOT be the original!",
+        ]
+
+    if duplicates:
+        lines += [
+            "",
+            f"🔍 <b>Found {total} similar token(s) on Base:</b>",
+            "",
+        ]
+
+        for i, d in enumerate(duplicates[:10], 1):
+            match_type = []
+            if d.get("name_match"):
+                match_type.append("name")
+            if d.get("symbol_match"):
+                match_type.append("symbol")
+            match_str = " + ".join(match_type)
+
+            age_str = fmt_age(d["pair_created_at"]) if d.get("pair_created_at") else "N/A"
+
+            lines.append(
+                f"{i}. <b>{d['name']}</b> (${d['symbol']})\n"
+                f"    📋 <code>{d['address']}</code>\n"
+                f"    💰 {fmt_price(d['price'])} │ MC {fmt_number(d['mcap'])}\n"
+                f"    🏊 Liq: {fmt_number(d['liquidity'])} │ Vol: {fmt_number(d['volume_24h'])}\n"
+                f"    🏦 {d.get('dex', 'N/A').upper()} │ Age: {age_str}\n"
+                f"    🔗 Matched by: {match_str}"
+            )
+            lines.append("")
+    else:
+        lines += [
+            "",
+            "✅ No duplicate or copycat tokens found on Base.",
+            "    This appears to be a unique token name/symbol.",
+        ]
+
+    lines += [
+        f"{'━' * 32}",
+        "💡 <b>Tip:</b> Always verify the contract address from",
+        "    official sources before buying.",
+        f"{'━' * 32}",
+    ]
+
+    return "\n".join(lines)

@@ -10,6 +10,7 @@ from src.config import config
 from src.chain import get_token_basic_info, get_eth_balance, get_token_balance, get_checksum
 from src.api_services import (
     dexscreener_token,
+    dexscreener_search,
     gecko_token_info,
     gecko_top_pools,
     basescan_get_contract_creation,
@@ -462,3 +463,110 @@ def _safe_float(val) -> float:
         return float(val or 0)
     except (ValueError, TypeError):
         return 0.0
+
+
+async def analyze_pvp(token_address: str) -> dict:
+    """
+    PvP Analysis — detect duplicate/copycat tokens with the same name or symbol.
+    Helps identify PvP situations where multiple tokens compete under the same name.
+    """
+    result = {
+        "token_name": "",
+        "token_symbol": "",
+        "token_address": token_address,
+        "token_liquidity": 0,
+        "token_mcap": 0,
+        "duplicates": [],
+        "total_found": 0,
+        "pvp_risk": "",
+        "is_original": True,
+    }
+
+    # Get info about the target token
+    chain_info = await get_token_basic_info(token_address)
+    if not chain_info:
+        return result
+
+    token_name = chain_info.get("name", "")
+    token_symbol = chain_info.get("symbol", "")
+    result["token_name"] = token_name
+    result["token_symbol"] = token_symbol
+
+    # Get market data for our token
+    dex = await dexscreener_token(token_address)
+    if dex:
+        result["token_liquidity"] = float(dex.get("liquidity", {}).get("usd", 0) or 0)
+        result["token_mcap"] = float(dex.get("marketCap", 0) or 0)
+
+    # Search for tokens with same name AND same symbol on DexScreener
+    duplicates = []
+
+    # Search by symbol
+    symbol_results = await dexscreener_search(token_symbol)
+    # Search by name
+    name_results = await dexscreener_search(token_name)
+
+    # Merge and deduplicate
+    seen_addresses = {token_address.lower()}
+    all_results = symbol_results + name_results
+
+    for pair in all_results:
+        base_token = pair.get("baseToken", {})
+        addr = base_token.get("address", "")
+        name = base_token.get("name", "")
+        symbol = base_token.get("symbol", "")
+
+        if not addr or addr.lower() in seen_addresses:
+            continue
+
+        # Check if name or symbol matches (case-insensitive)
+        name_match = (
+            token_name.lower() in name.lower() or name.lower() in token_name.lower()
+        ) if token_name else False
+        symbol_match = token_symbol.lower() == symbol.lower() if token_symbol else False
+
+        if name_match or symbol_match:
+            seen_addresses.add(addr.lower())
+            liq = float(pair.get("liquidity", {}).get("usd", 0) or 0)
+            mcap = float(pair.get("marketCap", 0) or 0)
+            vol = float(pair.get("volume", {}).get("h24", 0) or 0)
+            price = float(pair.get("priceUsd", 0) or 0)
+            created = int(pair.get("pairCreatedAt", 0) or 0) // 1000
+
+            duplicates.append({
+                "address": addr,
+                "name": name,
+                "symbol": symbol,
+                "price": price,
+                "liquidity": liq,
+                "mcap": mcap,
+                "volume_24h": vol,
+                "pair_created_at": created,
+                "dex": pair.get("dexId", ""),
+                "pair_address": pair.get("pairAddress", ""),
+                "name_match": name_match,
+                "symbol_match": symbol_match,
+            })
+
+    # Sort by liquidity descending
+    duplicates.sort(key=lambda x: x["liquidity"], reverse=True)
+    result["duplicates"] = duplicates
+    result["total_found"] = len(duplicates)
+
+    # Determine if our token is the "original" (highest liquidity)
+    if duplicates:
+        top_liq = duplicates[0]["liquidity"]
+        if top_liq > result["token_liquidity"] * 2:
+            result["is_original"] = False
+
+    # PvP risk assessment
+    if len(duplicates) == 0:
+        result["pvp_risk"] = "🟢 SAFE — No duplicates found"
+    elif len(duplicates) == 1:
+        result["pvp_risk"] = "🟡 LOW — 1 similar token exists"
+    elif len(duplicates) <= 3:
+        result["pvp_risk"] = "🟠 MEDIUM — Multiple similar tokens found"
+    else:
+        result["pvp_risk"] = f"🔴 HIGH — {len(duplicates)} similar tokens detected! Active PvP zone"
+
+    return result

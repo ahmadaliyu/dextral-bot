@@ -14,6 +14,7 @@ from src.token_analysis import (
     analyze_dev_wallet,
     analyze_whale_holders,
     get_recent_whale_txs,
+    analyze_pvp,
 )
 from src.api_services import (
     dexscreener_search,
@@ -28,6 +29,7 @@ from src.messages import (
     build_scan_message,
     build_trending_message,
     build_new_pairs_message,
+    build_pvp_message,
 )
 from src.formatters import dexscreener_url, basescan_token_url
 
@@ -50,6 +52,9 @@ def _get_token_keyboard(address: str, pair_address: str = "") -> InlineKeyboardM
         ],
         [
             InlineKeyboardButton("💸 Whale Txs", callback_data=f"whale_{address}"),
+            InlineKeyboardButton("⚔️ PvP Check", callback_data=f"pvp_{address}"),
+        ],
+        [
             InlineKeyboardButton("🔄 Refresh", callback_data=f"refresh_{address}"),
         ],
         [
@@ -99,6 +104,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "\n"
         "💸 /whale <code>&lt;address&gt;</code>\n"
         "    Recent whale transactions\n"
+        "\n"
+        "⚔️ /pvp <code>&lt;address&gt;</code>\n"
+        "    Check for duplicate/copycat tokens\n"
         "\n"
         "🔥 /trending\n"
         "    Trending tokens on Base\n"
@@ -338,6 +346,38 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await msg.edit_text(f"❌ Error: {str(e)[:200]}")
 
 
+async def cmd_pvp(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /pvp <address> — check for duplicate/copycat tokens."""
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Usage: <code>/pvp 0x...</code>\n"
+            "Checks if other tokens with the same name/symbol exist on Base.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    address = context.args[0].strip()
+    if not _is_address(address):
+        await update.message.reply_text("❌ Invalid address format.")
+        return
+
+    msg = await update.message.reply_text("⚔️ Running PvP analysis... Searching for duplicates...")
+
+    try:
+        pvp_info = await analyze_pvp(address)
+        text = build_pvp_message(pvp_info)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Full Token Report", callback_data=f"refresh_{address}")]
+        ])
+        await msg.edit_text(
+            text, parse_mode=ParseMode.HTML,
+            reply_markup=keyboard, disable_web_page_preview=True,
+        )
+    except Exception as e:
+        logger.error(f"Error in /pvp: {e}", exc_info=True)
+        await msg.edit_text(f"❌ Error: {str(e)[:200]}")
+
+
 # ═══════════════════════════════════════════════════════════════
 #  CALLBACK QUERY HANDLER (Inline Keyboard Buttons)
 # ═══════════════════════════════════════════════════════════════
@@ -393,6 +433,22 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             report = await analyze_token(address)
             whale_txs = await get_recent_whale_txs(address)
             text = build_whale_txs_message(whale_txs, report.symbol)
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back to Token", callback_data=f"refresh_{address}")]
+            ])
+            await query.edit_message_text(
+                text, parse_mode=ParseMode.HTML,
+                reply_markup=keyboard, disable_web_page_preview=True,
+            )
+        except Exception as e:
+            await query.edit_message_text(f"❌ Error: {str(e)[:200]}")
+
+    elif data.startswith("pvp_"):
+        address = data[4:]
+        await query.edit_message_text("⚔️ Running PvP analysis...")
+        try:
+            pvp_info = await analyze_pvp(address)
+            text = build_pvp_message(pvp_info)
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back to Token", callback_data=f"refresh_{address}")]
             ])
