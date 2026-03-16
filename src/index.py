@@ -4,7 +4,10 @@ Advanced Base chain token research Telegram bot.
 """
 
 import logging
+import os
 import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from telegram.ext import (
     ApplicationBuilder,
@@ -51,6 +54,29 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("dextral")
 
 
+# ─── Health-check HTTP server (keeps Render free tier happy) ──
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    """Minimal handler that returns 200 OK for any request."""
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Dextral Bot is running!")
+
+    def log_message(self, *args):
+        pass  # silence request logs
+
+
+def _start_health_server():
+    """Start a tiny HTTP server in a background thread so Render detects an open port."""
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"  🩺  Health-check server listening on port {port}")
+
+
 # ─── Boot ─────────────────────────────────────────────────────
 
 def main() -> None:
@@ -95,6 +121,9 @@ def main() -> None:
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler)
     )
+
+    # ── Start health-check server for Render free tier ─────────
+    _start_health_server()
 
     # ── Start polling ─────────────────────────────────────────
     logger.info("✅  Bot is running! Listening for messages...")
